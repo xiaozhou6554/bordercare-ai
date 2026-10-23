@@ -1,0 +1,4 @@
+{"id":"market_without_fee_schedule","kind":"pipeline_stage","message":"计算利润","intent":"profit","marketplace":"DE","stage":"profit_calculator","expect_success":false,"expected_error_contains":"仅支持美国站 USD"}
+{"id":"incomplete_evidence_has_no_overall_score","kind":"score_coverage","scores":{"market_demand":70,"profitability":null},"expect_overall_score":null,"expect_recommendation":"证据不足","expect_missing_dimensions":["competition","profitability","trend","supply_chain"]}
+{"id":"english_offline_qna","kind":"qna_language","message":"How do I choose a product?","expected_phrase":"I can help"}
+{"id":"chinese_offline_qna","kind":"qna_language","message":"如何选择产品？","expected_phrase":"我可以协助"}

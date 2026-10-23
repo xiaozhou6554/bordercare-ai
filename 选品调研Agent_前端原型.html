@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>跨境电商选品调研 Agent</title>
+<style>
+:root{
+  --bg:#f4f6fa; --card:#ffffff; --line:#e6eaf2; --txt:#1c2333; --sub:#6b7488;
+  --primary:#3d6be5; --primary-soft:#eef3ff; --green:#16a34a; --green-soft:#e8f7ee;
+  --orange:#ea8a00; --orange-soft:#fdf3e2; --red:#dc4b4b; --red-soft:#fdecec;
+  --sidebar:#10182b; --sidebar-txt:#aab4cc; --radius:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;background:var(--bg);color:var(--txt);font-size:14px;display:flex;height:100vh;overflow:hidden}
+
+/* ===== 左侧栏 ===== */
+aside{width:228px;min-width:228px;background:var(--sidebar);color:var(--sidebar-txt);display:flex;flex-direction:column;padding:18px 14px}
+.logo{display:flex;align-items:center;gap:10px;padding:2px 6px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+.logo-ico{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#4d7cff,#2b4fd0);display:flex;align-items:center;justify-content:center;font-size:17px}
+.logo b{color:#fff;font-size:14.5px;display:block}
+.logo span{font-size:11px;color:#7a86a3}
+.sec-title{font-size:11px;color:#66718f;margin:18px 6px 8px;letter-spacing:1px}
+.act{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;cursor:pointer;font-size:13px;transition:.15s}
+.act:hover{background:rgba(255,255,255,.07);color:#fff}
+.act.on{background:linear-gradient(90deg,rgba(77,124,255,.28),rgba(77,124,255,.08));color:#fff;border:1px solid rgba(99,140,255,.35)}
+.act .ic{width:16px;text-align:center}
+.hist{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;font-size:12.5px;cursor:pointer;color:#8e99b4}
+.hist:hover{background:rgba(255,255,255,.06);color:#dfe5f2}
+.hist small{margin-left:auto;font-size:10.5px;color:#5d6884}
+.cache-card{margin-top:auto;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:11px 12px;font-size:11.5px;line-height:1.9}
+.cache-card b{color:#d7deee}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#34d399;margin-right:5px}
+
+/* ===== 主区 ===== */
+main{flex:1;display:flex;flex-direction:column;min-width:0}
+header{height:58px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 22px;gap:16px}
+header h1{font-size:16px;font-weight:600}
+.mkt{display:flex;gap:4px;background:#f0f3f9;border-radius:99px;padding:3px}
+.mkt span{padding:4px 13px;border-radius:99px;font-size:12px;cursor:pointer;color:var(--sub)}
+.mkt span.on{background:#fff;color:var(--primary);font-weight:600;box-shadow:0 1px 4px rgba(30,50,100,.12)}
+.hd-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.badge{font-size:11px;padding:3px 10px;border-radius:99px;background:var(--green-soft);color:var(--green)}
+.badge.gray{background:#f0f3f9;color:var(--sub)}
+
+#chat{flex:1;overflow-y:auto;padding:20px 26px 10px;scroll-behavior:smooth}
+.wrap{max-width:920px;margin:0 auto}
+
+/* 用户气泡 */
+.umsg{display:flex;justify-content:flex-end;margin:14px 0}
+.umsg .b{background:var(--primary);color:#fff;padding:10px 16px;border-radius:14px 14px 3px 14px;max-width:70%;font-size:13.5px}
+
+/* 卡片通用 */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin:10px 0;box-shadow:0 1px 3px rgba(20,35,80,.04)}
+.card h3{font-size:14px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card h3 .ic{width:24px;height:24px;border-radius:7px;background:var(--primary-soft);color:var(--primary);display:inline-flex;align-items:center;justify-content:center;font-size:12.5px}
+.agent-row{display:flex;gap:10px;margin:12px 0}
+.avatar{width:30px;height:30px;min-width:30px;border-radius:9px;background:linear-gradient(135deg,#4d7cff,#2b4fd0);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px}
+.agent-body{flex:1;min-width:0}
+
+/* 意图识别卡 */
+.intent{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px;color:var(--sub)}
+.tag{padding:3px 11px;border-radius:99px;font-size:12px;background:var(--primary-soft);color:var(--primary)}
+.tag.dark{background:#eef1f6;color:#414c63}
+.tag.ok{background:var(--green-soft);color:var(--green)}
+
+/* Pipeline 步骤条 */
+.stage{display:flex;gap:12px;position:relative;padding-bottom:6px}
+.rail{display:flex;flex-direction:column;align-items:center;width:26px;min-width:26px}
+.node{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;background:#eef1f6;color:#9aa3b8;border:2px solid #e3e8f1;z-index:1}
+.node.run{background:#fff;color:var(--primary);border-color:var(--primary);animation:pulse 1.1s infinite}
+.node.done{background:var(--green);border-color:var(--green);color:#fff}
+.node.skip{background:#eef1f6;border-color:#e3e8f1;color:#9aa3b8}
+.node.abort{background:var(--red);border-color:var(--red);color:#fff}
+.node.fail{background:var(--orange);border-color:var(--orange);color:#fff}
+.rail .vline{width:2px;flex:1;background:#e3e8f1;margin-top:2px}
+.rail .vline.off{background:transparent}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(61,107,229,.35)}50%{box-shadow:0 0 0 6px rgba(61,107,229,0)}}
+.s-main{flex:1;min-width:0;padding-bottom:14px}
+.s-head{display:flex;align-items:center;gap:9px;padding-top:2px}
+.s-head b{font-size:13.5px}
+.s-head .st{font-size:11px;color:var(--sub)}
+.s-head .cached{font-size:10.5px;color:var(--orange);background:var(--orange-soft);border-radius:99px;padding:1px 8px}
+.s-body{margin-top:9px}
+.mini{font-size:12px;color:var(--sub);background:#f8f9fc;border:1px solid var(--line);border-radius:9px;padding:8px 12px}
+
+/* 指标网格 */
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.kpi{background:#f8f9fc;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.kpi .l{font-size:11px;color:var(--sub);margin-bottom:4px}
+.kpi .v{font-size:17px;font-weight:700}
+.kpi .v small{font-size:11px;color:var(--sub);font-weight:400}
+.kpi .d{font-size:10.5px;margin-top:2px;color:var(--green)}
+.kpi .d.neg{color:var(--red)}
+
+/* 来源/置信度脚注 */
+.src{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px;padding-top:9px;border-top:1px dashed var(--line);font-size:11px;color:var(--sub);align-items:center}
+.conf{padding:1px 9px;border-radius:99px;font-size:10.5px}
+.conf.High{background:var(--green-soft);color:var(--green)}
+.conf.Medium{background:var(--orange-soft);color:var(--orange)}
+.conf.Low{background:var(--red-soft);color:var(--red)}
+
+/* 表格 */
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{background:#f6f8fc;color:var(--sub);font-weight:500;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:8px 10px;border-bottom:1px solid #f0f2f7}
+tr:last-child td{border-bottom:none}
+td .bar-wrap{background:#eef1f6;height:5px;border-radius:99px;display:block;width:100%;margin-top:5px;overflow:hidden}
+td .bar{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#4d7cff,#7ea1ff)}
+.stars{color:#f5a623}
+
+/* 趋势图 */
+.trend-flex{display:flex;gap:18px;align-items:stretch}
+.trend-info{width:170px;min-width:170px;display:flex;flex-direction:column;gap:8px}
+.trend-info .kpi{flex:1}
+.trend-note{font-size:11px;color:var(--sub);line-height:1.6;margin-top:8px}
+
+/* 评分卡 */
+.score-flex{display:flex;gap:22px;align-items:center}
+.donut{position:relative;width:132px;height:132px;min-width:132px}
+.donut .cen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.donut .cen b{font-size:30px}
+.donut .cen span{font-size:11px;color:var(--sub)}
+.grade{font-size:12px;font-weight:600;padding:2px 12px;border-radius:99px}
+.grade.B{background:var(--green-soft);color:var(--green)}
+.dims{flex:1;display:flex;flex-direction:column;gap:9px}
+.dim{display:flex;align-items:center;gap:9px;font-size:12px}
+.dim .n{width:64px;color:var(--sub)}
+.dim .track{flex:1;height:8px;background:#eef1f6;border-radius:99px;overflow:hidden}
+.dim .fill{display:block;height:100%;border-radius:99px}
+.dim .s{width:46px;text-align:right;font-weight:600}
+.dim .w{width:58px;white-space:nowrap;color:#9aa3b8;font-size:11px;text-align:right}
+.rec{margin-top:12px;background:var(--green-soft);border-radius:9px;padding:10px 13px;font-size:12.5px;color:#14683a;line-height:1.7}
+
+/* 终止横幅 */
+.abort-banner{background:var(--red-soft);border:1px solid #f6cfcf;border-radius:10px;padding:12px 15px;font-size:12.5px;color:#a33;margin:10px 0;display:flex;gap:9px;align-items:flex-start;line-height:1.7}
+
+/* 报告 */
+.report{font-size:12.5px;line-height:1.9;color:#333c52}
+.report h4{font-size:13px;margin:10px 0 4px;color:var(--txt)}
+.report ul{padding-left:18px}
+.report li{margin:3px 0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:99px;padding:5px 13px;font-size:12px;cursor:pointer;color:#414c63}
+.chip:hover{border-color:var(--primary);color:var(--primary)}
+.lv{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0 2px}
+.lv .lab{font-size:11px;color:var(--sub);width:100%;margin-bottom:-1px}
+.kw{font-size:11.5px;padding:3px 10px;border-radius:99px}
+.kw.c1{background:var(--primary-soft);color:var(--primary)}
+.kw.c2{background:var(--green-soft);color:var(--green)}
+.kw.c3{background:var(--orange-soft);color:var(--orange)}
+
+/* 输入区 */
+footer{padding:12px 26px 16px;background:linear-gradient(transparent,var(--bg) 30%)}
+.inbox{max-width:920px;margin:0 auto}
+.box{display:flex;gap:10px;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:9px 9px 9px 16px;box-shadow:0 4px 16px rgba(25,45,100,.06)}
+.box input{flex:1;border:none;outline:none;font-size:13.5px;background:transparent;font-family:inherit}
+.box button{background:var(--primary);color:#fff;border:none;border-radius:10px;padding:9px 22px;font-size:13.5px;cursor:pointer;font-family:inherit}
+.box button:disabled{background:#b9c6ef}
+.typing{font-size:12px;color:var(--sub);margin-top:7px;padding-left:4px;display:none}
+.typing.show{display:block}
+.typing i{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--primary);margin:0 2px;animation:tp 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes tp{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+.fade{animation:fade .4s ease both}
+body.noanim .fade,body.noanim .node{animation:none!important;opacity:1!important;transform:none!important}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="logo"><div class="logo-ico">🔍</div><div><b>选品调研 Agent</b><span>Product Research Agent</span></div></div>
+  <div class="sec-title">快捷操作</div>
+  <div class="act on" data-act="full"><span class="ic">📊</span>完整选品调研</div>
+  <div class="act" data-act="profit"><span class="ic">💰</span>利润测算</div>
+  <div class="act" data-act="supplier"><span class="ic">🏭</span>供应商寻源</div>
+  <div class="act" data-act="qna"><span class="ic">💬</span>通用问答</div>
+  <div class="sec-title">最近会话</div>
+  <div class="hist">🐾 宠物饮水机调研 <small>今天</small></div>
+  <div class="hist">🐶 狗狗零食市场 <small>昨天</small></div>
+  <div class="hist">📦 收纳箱选品 <small>10-19</small></div>
+  <div class="cache-card">
+    <b>缓存状态</b><br>
+    <span class="dot"></span>内存缓存运行中<br>
+    TTL 6 小时 · 命中 3 次<br>
+    今日爬取 42 次 · 重试 1 次
+  </div>
+</aside>
+
+<main>
+  <header>
+    <h1>选品调研工作台</h1>
+    <div class="mkt" id="mkt">
+      <span class="on">US</span><span>UK</span><span>DE</span><span>JP</span><span>CA</span>
+    </div>
+    <div class="hd-right">
+      <span class="badge">● 服务正常</span>
+      <span class="badge gray">模型 deepseek-chat</span>
+    </div>
+  </header>
+
+  <div id="chat"><div class="wrap" id="flow"></div></div>
+
+  <footer>
+    <div class="inbox">
+      <div class="box">
+        <input id="inp" placeholder="输入品类关键词或问题，例如：帮我分析宠物饮水机的市场机会">
+        <button id="send">发 送</button>
+      </div>
+      <div class="typing" id="typing">Agent 正在处理<i></i><i></i><i></i></div>
+      <div class="chips" style="margin-top:9px">
+        <span class="chip" data-q="帮我分析宠物饮水机的市场机会">帮我分析宠物饮水机的市场机会</span>
+        <span class="chip" data-q="计算一下卖 $29.99 的利润">计算一下卖 $29.99 的利润</span>
+        <span class="chip" data-q="找一下宠物饮水机的1688供应商">找一下宠物饮水机的供应商</span>
+        <span class="chip" data-q="宠物用品现在做什么品类好">宠物用品现在做什么品类好</span>
+      </div>
+    </div>
+  </footer>
+</main>
+
+<script>
+/* ================= Mock 数据（依据技术文档业务规则构造） ================= */
+const M = {
+  keyword:"宠物饮水机", marketplace:"US",
+  overview:{total:1240, avg:"$34.99", median:"$29.99", band:"$18.99 – $89.99", rating:4.3, reviews:8620, brands:86, conc:"38%", newRatio:"22%"},
+  trend:{dir:"up", dirTxt:"上升", yoy:"+18.6%", peak:"11月 · 12月 · 1月",
+    pts:[38,40,42,45,44,48,52,55,58,63,71,78], months:["11月","12月","1月","2月","3月","4月","5月","6月","7月","8月","9月","10月"]},
+  category:{path:"Pet Supplies › Dog Supplies › Fountains", bsr:"1,150", size:"约 $8.5 亿", children:["不锈钢饮水机","循环过滤饮水机","户外便携饮水机"]},
+  competitors:[
+    {asin:"B09X4PQ7K2", title:"PETLIBRO 犬猫循环饮水机 不锈钢 2.5L", price:32.99, rating:4.4, reviews:12850, bsr:"856", sales:"约 3,200/月", lq:88},
+    {asin:"B08N5WRWNW", title:"Veken 宠物饮水机 84oz/2.4L 智能 LED", price:26.99, rating:4.3, reviews:45200, bsr:"312", sales:"约 5,800/月", lq:82},
+    {asin:"B01N0YQFDE", title:"Catit Flower Fountain 花朵喷泉饮水机 3L", price:29.99, rating:4.5, reviews:22100, bsr:"540", sales:"约 4,100/月", lq:76},
+    {asin:"B07QK2SPP7", title:"PetSafe Drinkwell 喷泉饮水机 3.8L", price:49.95, rating:4.2, reviews:8900, bsr:"1,420", sales:"约 1,900/月", lq:71},
+    {asin:"B08J4C8871", title:"Amazon Basics 宠物饮水机 2L", price:22.49, rating:4.1, reviews:15300, bsr:"980", sales:"约 2,700/月", lq:64}
+  ],
+  review:{avg:4.3, dist:[62,21,9,4,4], senti:["62%","21%","17%"],
+    praise:["静音水泵（28%）","大容量少加水（19%）","拆洗方便（15%）"],
+    pain:["用久水泵噪音变大（24%）","水位指示灯夜间刺眼（13%）","滤芯更换成本高（11%）"],
+    suggest:["升级水泵降噪结构","增加可关闭的柔光夜灯模式","推出滤芯订阅装降低复购成本"]},
+  keywords:[
+    {g:"核心词", c:"c1", ws:[["cat water fountain","74,000","高","$1.12"],["dog water fountain","33,000","高","$0.86"]]},
+    {g:"长尾机会词", c:"c2", ws:[["stainless steel cat fountain","12,400","低","$0.38"],["quiet cat water fountain","9,800","低","$0.42"],["dog water dispenser outdoor","7,600","低","$0.35"]]},
+    {g:"低竞争补量词", c:"c3", ws:[["ceramic cat fountain","5,200","中","$0.55"],["cat fountain filter replacement","4,100","中","$0.31"]]}
+  ],
+  profit:{price:29.99, cost:8.50, referral:4.50, fba:4.75, storage:0.35, shipping:1.20, duty:0.43, fee:11.23, net:10.26, margin:34.2},
+  suppliers:[
+    {name:"中山市某宠物电器有限公司", plat:"1688", price:"¥48.00", moq:500, rating:4.8, rev:"¥520万/年", contact:"陈经理 · 广东中山"},
+    {name:"宁波某智能家居科技有限公司", plat:"1688", price:"¥52.50", moq:300, rating:4.7, rev:"¥1,100万/年", contact:"林女士 · 浙江宁波"},
+    {name:"深圳某宠物用品有限公司", plat:"1688", price:"¥55.00", moq:200, rating:4.6, rev:"¥760万/年", contact:"王先生 · 广东深圳"},
+    {name:"Yiwu PetTech Trading Co., Ltd.", plat:"Alibaba", price:"$8.10", moq:500, rating:4.5, rev:"$210万/年", contact:"Ms. Li · Zhejiang"},
+    {name:"Guangzhou AquaPet Industries", plat:"Alibaba", price:"$8.60", moq:1000, rating:4.4, rev:"$340万/年", contact:"Mr. Zhang · Guangdong"}
+  ],
+  score:{overall:77, grade:"B", action:"go", dims:[
+    ["市场需求",78,"30%"],["竞争度",65,"25%"],["利润空间",88,"20%"],["趋势热度",82,"15%"],["供应链",72,"10%"]]},
+};
+
+/* ================= 工具函数 ================= */
+const $ = id => document.getElementById(id);
+const flow = $("flow");
+const STATUS = {pending:"待执行", run:"运行中", done:"已完成", skip:"已跳过", abort:"已终止", fail:"失败"};
+const STAGES = [
+  ["market_overview","市场概览","📦"],["trend_analyzer","趋势分析","📈"],["category_explorer","类目穿透","🗂"],
+  ["competitor_analysis","竞品分析","🥊"],["review_miner","评论洞察","💬"],["keyword_research","关键词研究","🔑"],
+  ["profit_calculator","利润测算","💰"],["supplier_search","供应商寻源","🏭"],["product_scorer","综合评分","🎯"]];
+
+function el(html){const d=document.createElement("div");d.innerHTML=html.trim();return d.firstChild}
+function scrollDown(){const c=$("chat");c.scrollTop=c.scrollHeight}
+function srcNote(source, conf, time){
+  return `<div class="src"><span>📌 来源：${source}</span><span class="conf ${conf}">置信度 ${conf}</span><span>🕐 数据更新：${time}</span><span style="margin-left:auto">数据仅供参考，不做最终决策依据</span></div>`;
+}
+function userMsg(t){flow.appendChild(el(`<div class="umsg fade"><div class="b">${t}</div></div>`));scrollDown()}
+
+/* 意图卡 */
+function intentCard(intent, kw, mk){
+  const names={full_pipeline:"完整选品调研",profit:"利润测算",supplier:"供应商寻源",qna:"通用问答",trend:"趋势分析"};
+  flow.appendChild(el(`<div class="agent-row fade"><div class="avatar">🤖</div><div class="agent-body">
+    <div class="card" style="margin:0">
+      <div class="intent">意图识别结果：
+        <span class="tag">${names[intent]||intent}</span>
+        <span class="tag dark">关键词：${kw}</span>
+        <span class="tag dark">站点：${mk}</span>
+        <span class="tag ok">路由：${intent==="full_pipeline"?"9 阶段 Pipeline":"单工具"}</span>
+      </div>
+    </div></div></div>`));scrollDown();
+}
+
+/* Pipeline 阶段骨架（垂直 stepper） */
+function stageNode(key,name,icon){
+  const node = el(`<div class="stage fade"><div class="rail"><div class="node" id="nd-${key}">${icon}</div><div class="vline" id="vl-${key}"></div></div>
+    <div class="s-main"><div class="s-head"><b>${name}</b><span class="st" id="st-${key}">待执行</span><span class="cached" id="ch-${key}" style="display:none">缓存命中</span></div>
+    <div class="s-body" id="sb-${key}"></div></div></div>`);
+  flow.appendChild(node);scrollDown();return node;
+}
+function setStage(key,status,cached){
+  const nd=$("nd-"+key), st=$("st-"+key);
+  nd.className="node "+status;
+  if(status==="done") nd.textContent="✓"; else if(status==="abort") nd.textContent="■";
+  else if(status==="fail") nd.textContent="!"; else if(status==="skip") nd.textContent="–"; else nd.textContent="⏳";
+  st.textContent=STATUS[status];
+  if(cached)$("ch-"+key).style.display="inline-block";
+  if(status!=="run")$("vl-"+key).classList.add("off");
+}
+
+/* ---------- 各阶段渲染 ---------- */
+function bMarket(){
+  const o=M.overview;
+  $("sb-market_overview").innerHTML=`<div class="card">
+    <div class="grid">
+      <div class="kpi"><div class="l">在售商品总数</div><div class="v">${o.total.toLocaleString()}<small> 件</small></div></div>
+      <div class="kpi"><div class="l">价格带（均价 ${o.avg}）</div><div class="v">${o.band.split(" – ")[0]}<small> – ${o.band.split(" – ")[1]}</small></div><div class="d">中位数 ${o.median}</div></div>
+      <div class="kpi"><div class="l">平均评分</div><div class="v">${o.rating}<small> / 5</small></div><div class="d">评论均值 ${o.reviews.toLocaleString()} 条</div></div>
+      <div class="kpi"><div class="l">品牌集中度</div><div class="v">${o.conc}<small> CR5</small></div><div class="d">共 ${o.brands} 个品牌 · 分散型市场</div></div>
+      <div class="kpi"><div class="l">Top 品牌</div><div class="v" style="font-size:14px">PETLIBRO<small> 等 5 家</small></div></div>
+      <div class="kpi"><div class="l">新品占比（近 90 天）</div><div class="v">${o.newRatio}</div><div class="d">进入门槛适中</div></div>
+      <div class="kpi"><div class="l">价格标准差</div><div class="v">$9.8</div><div class="d">定价分化明显</div></div>
+      <div class="kpi"><div class="l">评论数中位</div><div class="v">4,100<small> 条</small></div><div class="d">头部壁垒较高</div></div>
+    </div>
+    ${srcNote("Amazon 搜索结果页（前 60 个产品）","Medium","2026-10-22 09:30 UTC")}</div>`;
+}
+function bTrend(){
+  const t=M.trend, w=520,h=150,pad=6;
+  const max=80,min=30;
+  const pts=t.pts.map((v,i)=>[pad+i*(w-pad*2)/(t.pts.length-1), h-pad-(v-min)*(h-pad*2)/(max-min)]);
+  const line=pts.map(p=>p.join(",")).join(" ");
+  const area=`${pad},${h-2} ${line} ${w-pad},${h-2}`;
+  $("sb-trend_analyzer").innerHTML=`<div class="card">
+    <div class="trend-flex">
+      <div class="trend-info">
+        <div class="kpi"><div class="l">趋势方向</div><div class="v" style="color:var(--green)">↗ ${t.dirTxt}</div></div>
+        <div class="kpi"><div class="l">同比增长率</div><div class="v">${t.yoy}</div></div>
+        <div class="kpi"><div class="l">峰值月份</div><div class="v" style="font-size:13px">${t.peak}</div></div>
+      </div>
+      <div style="flex:1">
+        <svg width="100%" viewBox="0 0 ${w} ${h+6}">
+          <defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#4d7cff" stop-opacity=".22"/><stop offset="1" stop-color="#4d7cff" stop-opacity="0"/></linearGradient></defs>
+          <polygon points="${area}" fill="url(#tg)"/>
+          <polyline points="${line}" fill="none" stroke="#3d6be5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          ${pts.map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="#fff" stroke="#3d6be5" stroke-width="2"/>`).join("")}
+        </svg>
+        <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--sub);padding:0 4px">
+          ${t.months.map(m=>`<span>${m}</span>`).join("")}</div>
+        <div class="trend-note">近半年均值 / 前半年均值 = 1.42（&gt; 1.1 判定为上升）；搜索热度持续走高，Q4 为季节性峰值。</div>
+      </div>
+    </div>
+    ${srcNote("Google Trends（美国）· 近 12 个月","High","2026-10-22 09:32 UTC")}</div>`;
+}
+function bCategory(){
+  const c=M.category;
+  $("sb-category_explorer").innerHTML=`<div class="card">
+    <div style="font-size:13px;margin-bottom:9px">类目路径：<b>${c.path}</b></div>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi"><div class="l">BSR 基准线</div><div class="v">#${c.bsr}</div><div class="d">子类目畅销榜</div></div>
+      <div class="kpi"><div class="l">类目规模估计</div><div class="v">${c.size}</div><div class="d">估算值，仅供参考</div></div>
+      <div class="kpi"><div class="l">可下钻子类目</div><div class="v" style="font-size:13px">${c.children.length} 个</div><div class="d">${c.children.join(" / ")}</div></div>
+    </div>
+    ${srcNote("内置类目树（Amazon 类目体系）","Low","2026-10-22 09:33 UTC")}</div>`;
+}
+function bCompetitor(){
+  const maxP=50;
+  const rows=M.competitors.map(c=>`<tr>
+    <td><a style="color:var(--primary);text-decoration:none">${c.asin}</a></td>
+    <td style="max-width:210px">${c.title}</td>
+    <td><b>$${c.price.toFixed(2)}</b></td>
+    <td><span class="stars">★</span>${c.rating}</td>
+    <td>${c.reviews.toLocaleString()}</td><td>${c.bsr}</td><td>${c.sales}</td><td><b style="color:${c.lq>=80?'var(--green)':'#414c63'}">${c.lq}</b></td></tr>`).join("");
+  $("sb-competitor_analysis").innerHTML=`<div class="card" style="overflow-x:auto">
+    <table><thead><tr><th>ASIN</th><th>商品</th><th>价格</th><th>评分</th><th>评论数</th><th>BSR</th><th>预估销量</th><th>Listing 质量分</th></tr></thead><tbody>${rows}</tbody></table>
+    ${srcNote("Amazon 商品详情页 · 5 个头部竞品","Medium","2026-10-22 09:36 UTC")}</div>`;
+}
+function bReview(){
+  const r=M.review, colors=["#16a34a","#4d7cff","#f5a623","#ea8a00","#dc4b4b"];
+  const bars=r.dist.map((v,i)=>`<div style="display:flex;align-items:center;gap:7px;font-size:11.5px">
+    <span style="width:26px;color:var(--sub)">${5-i}★</span>
+    <span style="flex:1;height:7px;background:#eef1f6;border-radius:99px;overflow:hidden"><span style="display:block;height:100%;width:${v}%;background:${colors[i]};border-radius:99px"></span></span>
+    <span style="width:34px;color:var(--sub)">${v}%</span></div>`).join("");
+  const list=(a,c)=>a.map(x=>`<span class="kw ${c}">${x}</span>`).join("");
+  $("sb-review_miner").innerHTML=`<div class="card">
+    <div style="display:flex;gap:22px">
+      <div style="width:230px;min-width:230px">
+        <div style="font-size:12px;color:var(--sub);margin-bottom:7px">评分分布 · 平均 <b style="color:var(--txt)">${r.avg}</b>（基于 1,850 条评论）</div>${bars}
+        <div style="font-size:11.5px;color:var(--sub);margin-top:10px">情感分数：正面 ${r.senti[0]} · 中性 ${r.senti[1]} · 负面 ${r.senti[2]}</div>
+      </div>
+      <div style="flex:1">
+        <div class="lv"><span class="lab">👍 用户称赞点</span>${list(r.praise,"c2")}</div>
+        <div class="lv"><span class="lab">👎 用户痛点</span>${list(r.pain,"c3")}</div>
+        <div class="lv"><span class="lab">💡 改进建议（由差评关键词映射生成）</span>
+          <div style="font-size:12.5px;line-height:1.8;background:#f8f9fc;border:1px solid var(--line);border-radius:9px;padding:9px 12px">
+            ${r.suggest.map(s=>"· "+s).join("<br>")}</div></div>
+      </div>
+    </div>
+    ${srcNote("Amazon 评论页 · 复用竞品分析 ASIN 列表","Medium","2026-10-22 09:40 UTC")}</div>`;
+}
+function bKeyword(){
+  const sec=M.keywords.map(k=>`<div class="lv"><span class="lab">${k.g}</span>${k.ws.map(w=>
+    `<span class="kw ${k.c}">${w[0]} · 搜索 ${w[1]} · ${w[2]}竞争 · CPC ${w[3]}</span>`).join("")}</div>`).join("");
+  $("sb-keyword_research").innerHTML=`<div class="card">${sec}
+    ${srcNote("Amazon 搜索建议（Autocomplete）· 竞争度按词长估算","Medium","2026-10-22 09:43 UTC")}</div>`;
+}
+function bProfit(){
+  const p=M.profit;
+  const row=(l,v,hl)=>`<tr ${hl?'style="background:#f8f9fc;font-weight:600"':''}><td>${l}</td><td style="text-align:right">${v}</td></tr>`;
+  $("sb-profit_calculator").innerHTML=`<div class="card">
+    <div style="display:flex;gap:22px">
+      <table style="flex:1"><tbody>
+        ${row("售价", "$"+p.price.toFixed(2))}
+        ${row("采购成本", "$"+p.cost.toFixed(2))}
+        ${row("平台佣金（15%，最低 $0.30）", "$"+p.referral.toFixed(2))}
+        ${row("FBA 配送费（大号标准件）", "$"+p.fba.toFixed(2))}
+        ${row("月度仓储费", "$"+p.storage.toFixed(2))}
+        ${row("头程运费摊销", "$"+p.shipping.toFixed(2))}
+        ${row("关税（税率 5%）", "$"+p.duty.toFixed(2))}
+        ${row("费用合计", "$"+p.fee.toFixed(2))}
+        ${row("净利润", "$"+p.net.toFixed(2), 1)}
+      </tbody></table>
+      <div style="width:180px;min-width:180px;display:flex;flex-direction:column;gap:9px;justify-content:center">
+        <div class="kpi" style="text-align:center"><div class="l">利润率</div>
+          <div class="v" style="color:var(--green);font-size:26px">${p.margin}%</div></div>
+        <div class="kpi" style="text-align:center"><div class="l">目标利润率</div><div class="v" style="font-size:16px">25%</div><div class="d">达标 ✓ 继续调研</div></div>
+      </div>
+    </div>
+    ${srcNote("FBA 费率表（三档尺寸查表）· 默认参数补齐","High","2026-10-22 09:46 UTC")}</div>`;
+}
+function bSupplier(){
+  const rows=M.suppliers.map((s,i)=>`<tr>
+    <td><b>${s.name}</b><br><span style="font-size:11px;color:var(--sub)">${s.contact}</span></td>
+    <td><span class="tag dark" style="font-size:11px">${s.plat}</span></td>
+    <td><b>${s.price}</b></td><td>${s.moq} 件</td>
+    <td><span class="stars">★</span>${s.rating}</td><td>${s.rev}</td>
+    <td><a style="color:var(--primary);cursor:pointer;font-size:12px">查看链接 ›</a></td></tr>`).join("");
+  $("sb-supplier_search").innerHTML=`<div class="card" style="overflow-x:auto">
+    <table><thead><tr><th>供应商</th><th>平台</th><th>单价</th><th>MOQ</th><th>店铺评分</th><th>营收规模</th><th>联系方式</th></tr></thead><tbody>${rows}</tbody></table>
+    <div style="font-size:11px;color:var(--sub);margin-top:8px">⚠ 当前供应商数据为模拟数据（原型演示），正式版需接入真实 1688/Alibaba 数据源 · 按价格升序排列</div>
+    ${srcNote("1688 / Alibaba","Low","2026-10-22 09:49 UTC")}</div>`;
+}
+function bScore(){
+  const s=M.score, R=56, C=2*Math.PI*R, on=C*s.overall/100;
+  const color={A:"#16a34a",B:"#3d6be5",C:"#ea8a00",D:"#dc4b4b"}[s.grade];
+  const dims=s.dims.map(d=>{
+    const col=d[1]>=80?"#16a34a":d[1]>=65?"#3d6be5":d[1]>=50?"#ea8a00":"#dc4b4b";
+    return `<div class="dim"><span class="n">${d[0]}</span><span class="track"><span class="fill" style="width:${d[1]}%;background:${col}"></span></span><span class="s">${d[1]}</span><span class="w">权重 ${d[2]}</span></div>`;}).join("");
+  const rec={go:"✅ 建议推进：市场需求旺盛、利润率 34.2% 高于 25% 目标线、趋势上行。下一步建议：① 按 300–500 件起订量询价打样；② 针对“静音+不锈钢”差异化痛点做 Listing；③ 用低竞争长尾词低价冷启动。",caution:"⚠ 谨慎推进：存在需要验证的风险项，建议小批量试单并补充数据后再决策。",abandon:"⛔ 建议放弃：关键维度不达标，投入产出比不足。"}[s.action];
+  $("sb-product_scorer").innerHTML=`<div class="card">
+    <div class="score-flex">
+      <div class="donut">
+        <svg width="132" height="132" viewBox="0 0 132 132">
+          <circle cx="66" cy="66" r="${R}" fill="none" stroke="#eef1f6" stroke-width="12"/>
+          <circle cx="66" cy="66" r="${R}" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round"
+            stroke-dasharray="${on} ${C-on}" transform="rotate(-90 66 66)"/>
+        </svg>
+        <div class="cen"><b style="color:${color}">${s.overall}</b><span>五维加权总分</span></div>
+      </div>
+      <div class="dims">${dims}</div>
+      <div style="width:130px;text-align:center">
+        <div style="font-size:11px;color:var(--sub);margin-bottom:6px">综合等级</div>
+        <span class="grade ${s.grade}" style="font-size:22px;padding:6px 20px;background:${color}1a;color:${color}">${s.grade}</span>
+        <div style="font-size:11px;color:var(--sub);margin-top:6px">≥80 A · ≥65 B<br>≥50 C · &lt;50 D</div>
+      </div>
+    </div>
+    <div class="rec">${rec}</div>
+    ${srcNote("综合评分模型 · 权重固定（需求30/竞争25/利润20/趋势15/供应链10）","High","2026-10-22 09:52 UTC")}</div>`;
+}
+function bQnA(q){
+  flow.appendChild(el(`<div class="agent-row fade"><div class="avatar">🤖</div><div class="agent-body"><div class="card" style="margin:0">
+    <h3><span class="ic">💬</span>通用问答</h3>
+    <div class="report" style="line-height:2">
+      从当前市场看，宠物智能用品（饮水机、喂食器、猫砂盆）是近 12 个月增长最稳的细分赛道之一。选品时建议关注三点：
+      <ul><li><b>需求端</b>：优先选“养宠刚需 + 复购配件”的组合（如饮水机 + 滤芯），滤芯订阅能显著提升 LTV；</li>
+      <li><b>竞争端</b>：头部评论数已过 4 万，正面硬拼风险高，建议从<b>不锈钢 / 静音 / 无线</b>等差异化卖点切入；</li>
+      <li><b>利润端</b>：小家电类 FBA 费用占比约 35–40%，售价低于 $25 很难做出 25% 以上的净利率。</li></ul>
+      可以直接输入一个品类关键词（如“宠物饮水机”），我帮你跑一次完整调研。</div>
+    ${srcNote("LLM 通用问答（无工具数据支撑，仅供参考）","Low","2026-10-22")}</div></div></div>`));scrollDown();
+}
+function bProfitOnly(){
+  const p=M.profit;
+  flow.appendChild(el(`<div class="agent-row fade"><div class="avatar">🤖</div><div class="agent-body">
+    <div id="ph-profit"></div></div></div>`));
+  stageNode("profit_calculator","利润测算","💰"); setStage("profit_calculator","run");
+  setTimeout(()=>{setStage("profit_calculator","done");bProfit();
+    appendReport(`<h4>单工具结论</h4><div class="report">按默认参数（售价 $29.99 / 成本 $8.50 / 大号标准件）测算：净利润 <b>$${M.profit.net}</b>，利润率 <b style="color:var(--green)">${M.profit.margin}%</b>，高于 25% 目标线，<b>具备上架利润空间</b>。</div>`,true);
+    done();
+  },1500);
+}
+
+/* 终止横幅 + 报告 */
+function abortBanner(reason){
+  flow.appendChild(el(`<div class="abort-banner fade"><span style="font-size:16px">⛔</span>
+    <div><b>Pipeline 提前终止</b><br>${reason}<br>
+    <span style="font-size:11.5px;color:#b06">依据业务规则：趋势下行 → 建议放弃并终止；利润率 &lt; 目标利润率（25%）→ 建议调价或放弃并终止。后续阶段不再执行。</span></div></div>`));scrollDown();
+}
+function appendReport(extra, small){
+  flow.appendChild(el(`<div class="agent-row fade"><div class="avatar">🤖</div><div class="agent-body"><div class="card">
+    <h3><span class="ic">📄</span>选品调研报告 · ${M.keyword}（${M.marketplace}站）</h3>
+    <div class="report">
+      <h4>执行摘要</h4>
+      <div>${M.keyword}当前处于<b>成长期赛道</b>：市场在售 1,240 件、CR5 仅 38%（分散型竞争），Google Trends 同比 +18.6% 持续上行，Q4 为季节峰值。按默认参数测算利润率 34.2%，高于 25% 目标线。综合评分 <b style="color:var(--primary)">77 分（B 级 · 建议推进）</b>。用户痛点集中在“水泵噪音”与“滤芯成本”，可作为差异化切入点。</div>
+      <h4>下一步行动建议</h4>
+      <ul><li>1688 询价打样（MOQ 300–500 件，目标到手价 ≤ ¥50）；</li>
+      <li>围绕“静音水泵 + 不锈钢”升级设计，直接回应 24% 的差评痛点；</li>
+      <li>主推低竞争长尾词 <i>stainless steel cat fountain</i>（12,400 搜索/月，CPC $0.38）做冷启动；</li>
+      <li>10–11 月备货，赶上 Q4 峰值流量。</li></ul>
+      <h4>结论溯源（每个结论必须附四要素）</h4>
+      <table><thead><tr><th>结论</th><th>来源</th><th>关键证据</th><th>置信度</th><th>更新时间</th></tr></thead><tbody>
+      <tr><td>市场分散，进入可行</td><td>Amazon 搜索页</td><td>86 个品牌 / CR5 38%</td><td><span class="conf Medium">Medium</span></td><td>10-22 09:30</td></tr>
+      <tr><td>需求持续上行</td><td>Google Trends</td><td>YoY +18.6%，半年比 1.42</td><td><span class="conf High">High</span></td><td>10-22 09:32</td></tr>
+      <tr><td>利润达标</td><td>FBA 费率表</td><td>净利率 34.2% &gt; 25%</td><td><span class="conf High">High</span></td><td>10-22 09:46</td></tr>
+      <tr><td>痛点=噪音/滤芯</td><td>Amazon 评论</td><td>1,850 条评论关键词提取</td><td><span class="conf Medium">Medium</span></td><td>10-22 09:40</td></tr>
+      </tbody></table>
+      ${extra||""}
+      <div style="margin-top:10px;font-size:11px;color:var(--sub)">声明：本报告由 AI 自动生成，部分数据为估算值或模拟数据（已标注置信度），仅供选品参考，不构成最终决策依据。</div>
+    </div></div></div></div>`));scrollDown();
+}
+
+/* ================= 演示流程 ================= */
+let playing=false;
+function done(){
+  playing=false; $("typing").classList.remove("show"); $("send").disabled=false;
+}
+function runFull(q){
+  if(playing)return; playing=true;
+  $("typing").classList.add("show"); $("send").disabled=true;
+  userMsg(q);
+  setTimeout(()=>intentCard("full_pipeline",M.keyword,M.marketplace),700);
+  const nodes={};
+  const order=STAGES.map(s=>s[0]);
+  STAGES.forEach(([key,name,icon],i)=>{
+    setTimeout(()=>{nodes[key]=stageNode(key,name,icon);setStage(key,"run")},1600+i*1150);
+  });
+  const bodies={market_overview:bMarket,trend_analyzer:bTrend,category_explorer:bCategory,
+    competitor_analysis:bCompetitor,review_miner:bReview,keyword_research:bKeyword,
+    profit_calculator:bProfit,supplier_search:bSupplier,product_scorer:bScore};
+  order.forEach((key,i)=>{
+    setTimeout(()=>{setStage(key,"done",key==="market_overview");bodies[key]();},
+      1600+i*1150+950);
+  });
+  setTimeout(()=>{appendReport();done()},1600+9*1150+1400);
+}
+function runProfit(q){
+  if(playing)return; playing=true;
+  $("typing").classList.add("show"); $("send").disabled=true;
+  userMsg(q);
+  setTimeout(()=>intentCard("profit",M.keyword,M.marketplace),700);
+  setTimeout(()=>bProfitOnly(),1700);
+}
+function runQnA(q){
+  if(playing)return;
+  userMsg(q);
+  setTimeout(()=>{bQnA(q)},700);
+}
+function run(q){
+  runFull(q);
+}
+
+/* ================= 事件绑定 ================= */
+$("send").onclick=()=>{const v=$("inp").value.trim();if(!v)return;$("inp").value="";run(v)};
+$("inp").addEventListener("keydown",e=>{if(e.key==="Enter")$("send").click()});
+document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{
+  const q=c.dataset.q;
+  if(q.includes("利润"))runProfit(q); else if(q.includes("品类好"))runQnA(q); else runFull(q);
+});
+document.querySelectorAll(".act").forEach(a=>a.onclick=()=>{
+  document.querySelectorAll(".act").forEach(x=>x.classList.remove("on"));a.classList.add("on");
+  const t=a.dataset.act, map={full:"帮我分析宠物饮水机的市场机会",profit:"计算一下卖 $29.99 的利润",supplier:"找一下宠物饮水机的1688供应商",qna:"宠物用品现在做什么品类好"};
+  const q=map[t];
+  if(t==="profit")runProfit(q); else if(t==="qna")runQnA(q); else runFull(q);
+});
+$("mkt").addEventListener("click",e=>{
+  if(e.target.tagName!=="SPAN")return;
+  document.querySelectorAll("#mkt span").forEach(s=>s.classList.remove("on"));
+  e.target.classList.add("on");
+});
+
+/* ================= 初始化：默认自动演示完整流程 ================= */
+const QS=new URLSearchParams(location.search);
+const startQ="帮我分析宠物饮水机的市场机会";
+if(QS.has("final")){
+  /* final 模式：一次性渲染全部完成态（用于导出/截图） */
+  document.body.classList.add("noanim");
+  userMsg(startQ);intentCard("full_pipeline",M.keyword,M.marketplace);
+  STAGES.forEach(([key,name,icon])=>{stageNode(key,name,icon);setStage(key,"done",key==="market_overview")});
+  bMarket();bTrend();bCategory();bCompetitor();bReview();bKeyword();bProfit();bSupplier();bScore();
+  appendReport();$("typing").classList.remove("show");
+}else{
+  setTimeout(()=>runFull(startQ),600);
+}
+</script>
+</body>
+</html>
