@@ -1,274 +1,122 @@
-# BorderCare AI
+# 跨境电商选品调研 Agent
 
-跨境电商智能客服与运营助手的本地模拟项目。
+本地运行的选品调研工作台，包含意图识别、九阶段 Agent 调研、市场/趋势/竞品/评论/关键词/供应商分析、利润估算、五维评分、报告和 SSE 进度。
 
-这个项目不连接真实店铺、支付平台或物流平台，先用本地模拟数据跑通完整业务链路：
+## 环境
 
-```text
-用户问题 → 意图识别 → 查询知识库或业务数据 → 权限/业务规则校验 → 结构化回答
-```
+- Windows
+- Anaconda `model` 环境（或 `C:\Users\123\anaconda3\envs\model\python.exe`）
+- DeepSeek API Key（可选；未配置时采用本地规则识别意图）
+- 外部数据接口凭证按需配置，详细边界见 [`docs/data-sources.md`](docs/data-sources.md)
 
-## 当前模板包含
+## 启动步骤
 
-- FastAPI 服务
-- `GET /health` 健康检查
-- `POST /chat` 最小客服接口
-- SQLite 模拟用户、商品、订单、库存和物流数据
-- 基础订单查询、物流查询、商品咨询和政策咨询
-- 企业可演进架构：模块化单体 + 清晰的依赖边界
-- Agent 路由、有限状态入口和只读订单工具
-- 最小 API 测试
-- Git 工程实践贯穿开发、测试、合并和版本发布
+项目有两种启动方式：Docker 一键启动所有服务，或让 Docker 只运行 MySQL/Redis、再用 Conda 执行 `python main.py` 启动 API。请任选一种，完整命令、端口和停止方式见下方[容器部署与两种启动方式](#容器部署)。已有 `.env` 时不要重新复制模板覆盖；首次配置时仅在 `.env` 不存在的情况下复制 `.env.example`。
 
-当前版本是第 1～4 天的起步模板，暂未接入真实 LLM、RAG、微调和 vLLM。
+## 跨境数据源
 
-更完整的企业级架构说明见 [docs/企业级架构说明.md](docs/企业级架构说明.md)。
+Live product and competitor searches use Amazon public pages. Google Trends supplies trend signals when available. Supplier leads use a separate provider; see docs/data-sources.md for source limits.
 
-项目全流程、每个文件的作用、数据流和 40 天每日状态见 [docs/项目全流程与40天进度.md](docs/项目全流程与40天进度.md)。
+## 架构
 
-## 项目采用的架构：模块化单体 + 分层边界
-
-这个项目按实际企业应用的演进方式设计：第一阶段采用模块化单体，先保证本地开发和部署简单；代码内部按业务模块和依赖方向组织，未来可以根据业务边界拆分服务。
-
-当前确定的架构原则：
-
-- 按业务模块组织：客服、订单、商品库存、物流、知识库、运营分析。
-- 每个模块内部保持接口、应用、业务规则和基础设施边界。
-- Agent 属于客服模块的应用编排，不是全系统的万能控制器。
-- RAG 属于知识库模块，客服模块通过应用接口调用，不直接操作向量数据库。
-- LLM、Embedding、数据库和外部平台都通过适配器接入。
-- 第一阶段不提前拆微服务；等出现明确的性能、团队或部署边界后再拆分。
+项目采用 DDD 四层 + Agent 编排：
 
 ```text
-API / 管理后台 / 定时任务
-        ↓
-模块化单体应用
-        ↓
-客服模块的 ChatUseCase（应用层）
-        ↓
-CustomerAgent（路由和工具编排）
-        ↓
-OrderTool（受控工具）
-        ↓
-订单模块的权限规则 + Order/Shipment（业务规则层）
-        ↓
-OrderRepository（数据访问抽象）
-        ↓
-SQLite / PostgreSQL 等基础设施适配器
+scr/interfaces/       Interface：HTTP JSON/SSE、Pydantic DTO、Web 工作台、CLI
+scr/application/      Application：ResearchAgent、九阶段 Pipeline、工具注册与编排
+scr/domain/           Domain：业务模型、数据端口、利润和评分规则
+scr/infrastructure/   Infrastructure：DeepSeek 网关、数据源适配器、TTL 缓存、依赖装配
 ```
 
-## 完整目录结构
+Agent 调用应用层工具，应用层依赖 Domain 端口，Infrastructure 提供端口实现；接口层通过组合根装配应用，不在 Domain 层耦合 FastAPI、HTTP SDK 或具体缓存实现。
 
-下面是当前起步模板的目录结构，以及它向企业级模块化单体演进时的目标方向。注释中的“负责”表示该目录应该放什么；不要为了方便把所有代码都塞进 `api.py`。
+## 常用接口
 
-```text
-bordercare-ai/
-│
-├── app/                                      # 应用主代码：所有运行时业务代码都放在这里
-│   ├── __init__.py                           # Python 包标识文件
-│   ├── api.py                                # 接口层入口：创建 FastAPI 应用和 HTTP 路由
-│   ├── config.py                             # 配置层：项目路径、数据库地址和环境变量
-│   ├── schemas.py                            # 接口 DTO：定义 API 请求和响应的数据结构
-│   ├── database.py                           # 数据库基础连接：创建 SQLite 连接和初始化表结构
-│   ├── chat_service.py                       # 兼容入口：把旧调用转交给 ChatUseCase
-│   │
-│   ├── application/                          # 应用层：编排一个完整业务用例
-│   │   ├── __init__.py                       # 应用层 Python 包标识文件
-│   │   ├── chat_use_case.py                  # 客服用例：组装 Agent、工具和仓储并执行请求
-│   │   │
-│   │   ├── agents/                           # Agent 编排：决定下一步做什么
-│   │   │   ├── __init__.py                   # Agent 包标识文件
-│   │   │   ├── router.py                     # 意图路由：把用户问题分成订单、物流、退款等类型
-│   │   │   └── customer_agent.py             # 客服 Agent：选择工具、控制流程和组织最终回答
-│   │   │
-│   │   └── tools/                            # 业务工具：给 Agent 使用的受控能力
-│   │       ├── __init__.py                   # 工具包标识文件
-│   │       └── order_tool.py                 # 订单工具：查询订单、物流，并执行用户权限校验
-│   │
-│   ├── domain/                               # 业务规则层：稳定的电商业务概念和规则
-│   │   ├── __init__.py                       # 领域包标识文件
-│   │   ├── entities.py                       # 业务模型：Order、Shipment 等核心业务对象
-│   │   ├── repositories.py                   # 数据访问抽象：只定义需要的数据能力，不写 SQL
-│   │   └── services.py                       # 业务规则/策略：例如订单归属和访问权限规则
-│   │
-│   └── infrastructure/                       # 基础设施层：数据库、模型和外部系统适配器
-│       ├── __init__.py                       # 基础设施包标识文件
-│       └── persistence/                      # 持久化适配器：把领域接口连接到具体数据库
-│           ├── __init__.py                   # 持久化包标识文件
-│           └── sqlite_order_repository.py    # SQLite 仓储实现：执行订单和物流查询 SQL
-│
-├── data/                                     # 项目数据：模拟业务数据、知识库和评测数据
-│   ├── raw/                                  # 原始业务资料：后续由清洗和 RAG 流程处理
-│   │   ├── products/                         # 商品目录、SKU 和商品属性
-│   │   │   └── products.csv                  # 模拟商品主数据
-│   │   ├── policies/                         # 各市场退货、退款和配送政策
-│   │   │   ├── return_policy_us.md           # 美国市场模拟退货政策
-│   │   │   ├── return_policy_de.md           # 德国市场模拟退货政策
-│   │   │   └── shipping_policy.md            # 模拟配送政策
-│   │   ├── faq/                              # 常见问题和客服话术资料
-│   │   │   └── faq_cn.md                     # 中文 FAQ 示例
-│   │   └── logistics/                        # 物流状态和承运商规则
-│   │       └── carrier_rules.md              # 模拟物流状态说明
-│   ├── seed/                                 # 数据初始化相关文件
-│   │   └── .gitkeep                          # 保留空目录，后续可放 SQL 或 JSON 种子数据
-│   └── eval/                                 # 评测集：RAG、意图分类和安全测试样本
-│       └── .gitkeep                          # 保留空目录，后续放 JSONL 评测数据
-│
-├── database/                                 # 本地运行产生的数据库文件
-│   ├── .gitkeep                              # 保留数据库目录
-│   └── bordercare.db                         # 执行 seed_db.py 后生成，不提交到 Git
-│
-├── scripts/                                  # 一次性脚本和开发辅助脚本
-│   ├── __init__.py                           # 脚本包标识文件
-│   └── seed_db.py                            # 清空并生成模拟用户、商品、订单和物流数据
-│
-├── tests/                                    # 自动化测试：接口、领域规则和安全场景
-│   └── test_api.py                            # 健康检查、缺少订单号和越权查询测试
-│
-├── docs/                                     # 项目设计文档
-│   ├── 企业级架构说明.md                      # 企业级模块化单体和 Agent 边界说明
-│   ├── architecture.md                       # 架构说明兼容版
-│   └── 项目全流程与40天进度.md                 # 文件说明、数据流和每日进度主文档
-├── requirements.txt                          # Python 依赖清单
-├── .gitignore                                # Git 忽略规则：虚拟环境、缓存和本地数据库
-└── README.md                                 # 项目入口说明、启动方式和学习路线
-```
+- `GET /api/health`：仅返回公共服务状态和首次工作区初始化所需标记；依赖、凭证和缓存详情不对外返回
+- `GET /api/tools`：工具及 Pipeline 阶段
+- `POST /api/research`：完整调研报告
+- `POST /api/research/stream`：SSE 阶段进度和结果
+- `POST /api/profit`：参数化利润测算
+- `GET/DELETE /api/cache`：查看/清理进程内缓存
 
-### 企业级目标目录结构
+## 安全、幂等与记忆
 
-当客服、订单和知识库功能继续增加时，代码按业务模块演进为：
+- 用户输入和会话历史作为不可信数据传给模型；常见提示词注入请求会被拦截，模型工具/意图结果限制在允许列表中。
+- 报告 AI 摘要中的数字会与来源数据进行核对；出现来源中不存在的数字时丢弃该摘要，保留下方的结构化来源报告。
+- API 可使用 `Idempotency-Key` 请求头；同 key、同请求体重放已完成结果，同 key 换请求体返回 `409`。
+- 浏览器生成并保存会话 ID；Redis/内存保存最近 100 条消息 30 天，模型上下文最多使用最近 12 条。可用 `DELETE /api/session/{session_id}` 删除一段会话记忆。
+- 默认使用进程内 TTL 缓存。设置 `REDIS_URL=redis://localhost:6379/0` 并安装依赖后，工具缓存、记忆和幂等结果使用 Redis；缓存组件可回退本机内存，但 `/api/health/ready` 会报告 Redis 不可用，生产环境不会把降级视为就绪。
+- 调用幂等接口示例：`curl -H "Idempotency-Key: request-20261022-001" -H "Content-Type: application/json" -d '{"message":"分析便携咖啡机","session_id":"你的UUID"}' http://127.0.0.1:8000/api/research`。
 
-```text
-app/
-├── interfaces/http/                         # 对外 HTTP 接口、鉴权、异常处理
-├── modules/                                  # 业务模块，模块之间不直接访问对方数据库表
-│   ├── customer_service/                    # 客服会话、Agent、人工接管
-│   │   ├── application/                     # 客服用例和 Agent 编排
-│   │   ├── domain/                          # 会话、意图、转人工规则
-│   │   └── infrastructure/                 # 模型和工具适配器
-│   ├── order/                               # 订单、支付、退款
-│   │   ├── application/                     # 订单查询和退款申请用例
-│   │   ├── domain/                          # 状态、权限、幂等规则
-│   │   └── infrastructure/                 # 数据库和支付适配器
-│   ├── catalog/                             # 商品和库存
-│   ├── logistics/                           # 物流和承运商
-│   ├── knowledge/                           # 文档、检索、RAG 评测
-│   └── analytics/                           # 运营指标和只读分析
-├── shared/                                  # 日志、配置、错误、权限、事件等公共能力
-└── infrastructure/                          # 数据库、缓存、向量库、LLM 网关、外部 API
-```
+登录开启时，会话键按工作区和用户隔离。持久化历史按工作区过滤；匿名开发模式不提供多租户保护。
 
-当前目录中的 `app/application`、`app/domain` 和 `app/infrastructure` 是第 1～4 天的可运行起步结构。随着业务模块增加，再按上面的目标结构迁移，避免一开始为了形式引入微服务复杂度。
+## 测试
 
-### 各层之间怎么依赖
-
-```text
-API / 管理后台 / 定时任务
-    ↓ 调用
-模块化单体中的 Application Use Case
-    ↓ 编排
-customer_agent.py（Agent 路由和工具编排）
-    ↓ 使用
-order_tool.py（受控业务工具）
-    ↓ 依赖抽象
-repositories.py（数据访问抽象）
-    ↓ 由基础设施实现
-SQLite / PostgreSQL 等基础设施适配器
-```
-
-需要特别注意：
-
-- `api.py` 只处理 HTTP，不直接写订单业务规则或 SQL。
-- `CustomerAgent` 只负责路由和编排，不能自行绕过权限规则。
-- `domain/` 不应该导入 FastAPI、SQLite 或具体大模型 SDK。
-- `repositories.py` 只定义“需要什么数据”，具体 SQL 放到 `infrastructure/`。
-- Agent 只负责编排流程，不能绕过权限、退款和库存等业务规则。
-- 将来接入 PostgreSQL、RAG、真实物流 API 或 vLLM 时，优先替换基础设施实现，不修改核心业务规则。
-- 第一阶段使用模块化单体；只有出现明确的业务、团队、部署或性能边界时，才考虑拆分微服务。
-
-## 环境要求
-
-- Python 3.10+
-- Windows、macOS 或 Linux 均可
-
-## 启动项目
-
-在当前目录执行：
-
-```powershell
-cd bordercare-ai
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python scripts\seed_db.py
-uvicorn app.api:app --reload
-```
-
-运行测试：
+在项目目录和 `model` 环境中执行：
 
 ```powershell
 python -m pytest -q
 ```
 
-启动后打开：
+测试覆盖冒烟、功能、定向回归、性能、并发压力及全量回归。压力和性能门槛针对本地模拟链路，不代表外部平台或模型服务的 SLA。无需真实平台凭证；外部接口使用模拟响应验证请求和字段映射。
 
-- 接口文档：http://127.0.0.1:8000/docs
-- 健康检查：http://127.0.0.1:8000/health
 
-## 示例请求
+## 企业工作区能力
 
-### 查询订单物流
+- `DATABASE_URL` 支持 MySQL 8.4（`mysql+pymysql`）、PostgreSQL 或 SQLite，用于用户、组织成员、项目、调研任务、报告版本/审核、商品候选快照、合规评估、反馈和审计记录；未配置时使用进程内存任务存储。启动通过 `scr/infrastructure/schema_migrations.py` 执行版本化迁移，不再用 `create_all` 作为运行时迁移策略。
+- `AUTH_ENABLED=true` 启用登录和工作区隔离。数据库没有账号时，登录页会显示一次性“初始化工作区”入口以创建首个管理员；首个账号创建后，只有设置 `AUTH_ALLOW_SIGNUP=true` 才允许继续注册。`AUTH_SECRET` 必须为至少 32 字符的随机密钥，不要提交到 Git。
+- `REDIS_URL` 配置后，缓存、会话、任务队列和跨进程请求限流可共享 Redis。生产/预发要求 Redis 可用；不可用时 Worker 启动失败，API readiness 报告降级，不会静默改用单机队列。
+- `POST /api/tasks` 提交后台调研，`GET /api/tasks/{task_id}` 查询进度；任务支持取消、失败重试、收藏和 Markdown 导出。Redis Streams 支持消费组确认、租约心跳、崩溃后 pending reclaim、3 次自动重试、死信元数据与积压/pending 统计。开发模式不配置 Redis 时使用进程内线程，进程退出后不能恢复未持久化任务。
+- 工作区 API：`/api/projects`、`/api/members`、`/api/candidates`、`/api/compliance-assessments`、`/api/feedback`、`/api/tasks/{task_id}/reviews` 和 `/api/tasks/{task_id}/report-versions`。合规评估默认“需人工复核”，不构成法律意见。
+- `API_RATE_LIMIT_PER_MINUTE` 和 `AUTH_RATE_LIMIT_PER_MINUTE` 分别配置普通 API 及登录/注册限流。无 Redis 时，计数仅在当前进程共享。
+- 请求记录使用关联 ID 和耗时，不记录查询正文。调研证据保留数据来源、站点、采集时间、有效期和原始链接。
 
-```json
-{
-  "user_id": "U1001",
-  "message": "我的订单 BC10001 到哪里了？"
-}
+### 容器部署
+
+Compose 默认使用 MySQL 8.4、Redis 和强随机 `AUTH_SECRET`。在 `.env` 中设置 `MYSQL_PASSWORD`、`MYSQL_ROOT_PASSWORD` 与 `AUTH_SECRET`；真实密钥不得写入 compose 文件或 Git。MySQL 映射到本机 3307 端口，Redis 映射到 6380 端口，避免占用常见默认端口。容器会把 API 与后台 Worker 分开运行，启动时自动应用数据库迁移：
+
+### 启动方式一：全部通过 Docker 启动
+
+适合希望 API、后台 Worker、MySQL 和 Redis 全部由 Docker 管理的情况。先确认 Docker Desktop 已运行，并已在 `.env` 配好数据库密码和 `AUTH_SECRET`，然后在项目目录执行：
+
+```powershell
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
+docker compose up -d --build
+docker compose ps
 ```
 
-### 查询退货政策
+确认 `api`、`worker`、`mysql`、`redis` 状态正常后，访问 `http://127.0.0.1:<API_PORT>`。`API_PORT` 读取自 `.env`，未设置时默认为 `8000`。查看 API/Worker 日志可运行 `docker compose logs -f api worker`。停止服务使用 `docker compose stop`；这会保留容器和数据卷。不要使用 `docker compose down -v` 清除数据库卷。
 
-```json
-{
-  "user_id": "U1001",
-  "message": "德国用户可以退货吗？"
-}
+### 启动方式二：Docker 只运行数据库和 Redis，Python 启动 API
+
+适合希望在本机 Conda 环境运行和调试 API 的情况。确保 `.env` 中 `DATABASE_URL` 指向本机 MySQL 映射端口（默认 `127.0.0.1:3307`）、`REDIS_URL` 指向本机 Redis 映射端口（默认 `127.0.0.1:6380`），并配置好数据库密码和 `AUTH_SECRET`。然后执行：
+
+```powershell
+docker compose up -d mysql redis
+conda activate model
+python .\main.py
 ```
 
-## 示例账号和订单
+`main.py` 会读取 `.env` 的 `API_PORT`，未设置时使用 `8000`。看到 Uvicorn 显示启动成功后，访问 `http://127.0.0.1:<API_PORT>`。保持该 PowerShell 窗口运行；停止时按 `Ctrl+C`。此方式不要再启动 Compose 的 `api` 和 `worker` 服务，以免运行两份 API/Worker。
 
-| 用户 | 市场 | 订单 |
-|---|---|---|
-| `U1001` | US | `BC10001`、`BC10002` |
-| `U1002` | DE | `BC10003` |
-| `U1003` | UK | `BC10004` |
+两种方式任选一种。当前本机 `.env` 若将 `API_PORT` 设为 `8001`，访问地址就是 `http://127.0.0.1:8001`。设置 `APP_ENV=production` 时需启用认证、使用至少 32 字符随机 `AUTH_SECRET`，并按需配置模型和授权数据源凭证。端口默认只绑定本机；对外提供服务前应在可信反向代理配置 HTTPS、访问控制和备份。
 
-## 当前模板对应的学习阶段
+### 数据库备份与恢复
 
-当前模板对应第 1～4 天：先完成项目边界、业务模型、模块化单体的第一阶段骨架、模拟数据库和最小客服流程。后续功能应该按业务模块增加，而不是把代码全部继续写进 `api.py`。
+备份示例使用容器环境变量传递口令，不把口令写进命令行参数或 Shell 历史：
 
-## Git 使用方式
-
-Git 不单独作为一天的理论任务，而是每天开发的固定流程：
-
-```text
-main
-  ↓
-创建 feat/day-XX-功能名 或 fix/day-XX-问题名
-  ↓
-完成一个可运行的小改动并提交
-  ↓
-运行测试、检查敏感信息和临时文件
-  ↓
-合并阶段成果并创建版本 Tag
+```powershell
+docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysqldump -u"$MYSQL_USER" "$MYSQL_DATABASE"' > research.sql
+Get-Content research.sql | docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql -u"$MYSQL_USER" "$MYSQL_DATABASE"'
 ```
 
-当前本地项目已经初始化 Git，并配置了 `.gitignore`。没有远程 Git 平台时先进行本地分支和提交练习；以后接入 GitHub、GitLab 或企业 Git 平台，再增加 Pull Request、代码评审和 CI，不改变本地提交习惯。
+请将备份放到受控的加密存储并定期做恢复演练；恢复前停止 API/Worker，确认目标库与备份时间，再启动服务。保留期限应由业务方确认。数据库迁移在应用启动时顺序执行；回滚版本前先备份并按迁移脚本编写反向恢复步骤，目前没有自动降级迁移。
 
-## 下一步学习顺序
+### 健康检查、SLO 假设与故障排查
 
-1. 第 5 天：接入统一的 LLM Client 和结构化输出。
-2. 第 9～15 天：将 `data/raw/` 建成 RAG 知识库。
-3. 第 16～22 天：增加意图路由、权限、人工接管和工具调用。
-4. 第 23～29 天：增加运营查询和只读 NL2SQL。
-5. 第 30 天以后：再考虑微调、Docker 和 vLLM。
+- `GET /api/health/live` 只检查进程存活；`GET /api/health/ready` 检查数据库与 Redis 就绪；公共健康响应不返回依赖状态、供应商配置、凭证状态或缓存指标。
+- 初始容量假设（需业务确认，不是 SLA）：单实例 API 2 个 Worker、每 Worker 最多处理 1 项，先按 5 个并发用户/分钟的轻负载验证；本地模拟请求 p95 目标暂定 2 秒，不含外部模型/数据源耗时。没有生产观测数据前不承诺可用性百分比。
+- 本地性能记录（2026-10-23，Conda `model` / Python 3.10.21 / Windows 10）：30 个唯一关键词的完整九阶段本地模拟 Pipeline、16 个并发线程、冷缓存，0 错误，119.32 请求/秒，P50 8.21ms、P95 54.11ms、P99 71.05ms，Python 堆峰值 0.53MiB；压力回归另覆盖 100 个混合请求/16 线程，0 错误。该结果只代表进程内模拟适配器，不含 HTTP、真实模型、平台 API、PostgreSQL、Redis、容器及网络延迟，不能外推为线上吞吐或 SLA。
+- 查不到数据时先看结果卡片的实际来源、错误分类和时间；检查授权、额度和站点。健康接口不判断外部平台授权状态。
+- API 无法启动时检查配置校验与数据库迁移日志；任务停留排队时检查 Redis 健康状态和 Worker 日志；数据库故障先恢复连接再检查队列任务状态。不要通过抓取受限页面绕过平台访问规则。

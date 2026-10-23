@@ -1,2 +1,0 @@
-"""BorderCare AI application package."""
-

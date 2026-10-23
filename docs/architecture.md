@@ -1,174 +1,77 @@
-# BorderCare AI 企业级架构基线
+# 跨境电商选品调研 Agent 架构
 
-## 架构决策
+## 架构边界
 
-本项目采用：
-
-> 模块化单体（Modular Monolith）+ 六边形/清晰架构的依赖方向
-
-这比直接做微服务更适合当前阶段。第一版可以在一台机器上运行，但代码边界按照企业系统设计，未来可以把订单、知识库、模型网关或运营分析拆成独立服务。
-
-## 为什么不一开始拆微服务
-
-当前项目还处于学习和验证阶段，业务量、团队规模和部署环境都不明确。直接拆微服务会提前引入：
-
-- 服务注册与发现
-- 网络调用和重试
-- 分布式事务
-- 消息队列治理
-- 独立部署和监控
-- 多服务本地开发成本
-
-因此选择“部署简单、边界清晰”的模块化单体。模块之间通过应用服务、接口和领域事件协作，禁止随意跨模块访问数据库表。
-
-## 企业级目标结构
+项目按 DDD 四层组织，并在 Application 层编排 Agent。依赖从外向内：Interface 调用 Application，Application 面向 Domain 模型和端口，Infrastructure 实现 Domain 端口并由组合根注入。Domain 不依赖 FastAPI、HTTP 客户端、模型 SDK 或缓存实现。
 
 ```text
-客户端 / 管理后台 / 定时任务
-              ↓
-       API / Application Interface
-              ↓
-       模块化单体应用
-       ├── 客服模块
-       ├── 订单模块
-       ├── 商品与库存模块
-       ├── 物流模块
-       ├── 知识库模块
-       ├── 运营分析模块
-       └── 身份、权限与审计模块
-              ↓
-       基础设施适配器
-       ├── 关系数据库
-       ├── 向量数据库 / 搜索引擎
-       ├── 缓存
-       ├── 对象存储
-       ├── LLM / Embedding 网关
-       └── 外部物流或电商平台 API
+用户 / 浏览器 / CLI
+        |
+Interface：HTTP、SSE、DTO、Web 工作台、CLI
+        |
+Application：ResearchAgent、九阶段 Pipeline、工具注册
+        |
+Domain：业务模型、数据端口、利润与评分规则
+        ^
+        |
+Infrastructure：DeepSeek 网关、市场数据适配器、TTL 缓存
+        |
+组合根：Infrastructure Container 注入应用端口实现
 ```
 
-## 代码组织原则：按业务模块优先
+## 分层目录和职责
 
-企业项目不建议把所有订单代码、所有 Agent 代码和所有数据库代码分别堆成全局目录。推荐先按业务模块划分，再在模块内部保持层次边界：
+| 层 | 目录 | 职责 |
+|---|---|---|
+| Interface | `scr/interfaces/http` | FastAPI 路由、请求/响应 DTO、健康检查、JSON 和 SSE |
+| Interface | `scr/interfaces/web` | 按产品原型实现的浏览器工作台 |
+| Application | `scr/application/agent.py` | 意图识别、单工具路由、调研阶段调度、流程提前终止、报告编排 |
+| Application | `scr/application/tool_registry.py` | 工具边界、缓存键、错误收敛和分析工具执行 |
+| Domain | `scr/domain/models.py` | 意图、任务、消息、工具输出、AgentState 和报告模型 |
+| Domain | `scr/domain/ports.py` | 市场数据、模型和缓存抽象端口 |
+| Domain | `scr/domain/services.py` | FBA 费用估算、净利润和五维评分规则 |
+| Infrastructure | `scr/infrastructure` | 授权数据适配、DeepSeek 网关、TTL 缓存、SQLAlchemy Repository、schema 迁移和后台队列 |
+| Infrastructure | `scr/infrastructure/container.py` | Agent/Provider 组合根；HTTP 当前仍在路由模块中装配持久化和队列，属于待消除的分层耦合 |
+
+## 护栏、幂等与记忆
+
+- `scr/application/guardrails.py` 在 Application 边界过滤常见直接提示注入，限制历史角色和长度，并检查 AI 摘要是否引入来源中不存在的数字。模型输出不是市场数据事实源，事实表以工具结构化结果和来源为准。
+- 意图与参数经过枚举、长度和字段名校验；Agent 工具由固定注册表执行，模型不能任意调用代码或 SQL。
+- `scr/application/idempotency.py` 对同一 key 串行处理、重放缓存响应；同 key 搭配不同请求体返回冲突。Redis 后端提供跨进程处理锁。
+- `scr/infrastructure/session_memory.py` 保存每个 UUID 会话 30 天的有限对话档案，模型只读取最近 12 条消息；档案上限 100 条，并可通过会话删除接口清除。
+- `scr/infrastructure/cache.py` 是内存后备；配置 Redis 后由 `scr/infrastructure/redis_cache.py` 提供共享 TTL 工具缓存、记忆和幂等结果。
+- 开启认证后，会话键包含工作区和用户标识，持久化查询按工作区过滤；不做跨会话用户画像。系统提示注入检测是规则型基础防护，不能保证识别所有变体；语义事实蕴含也未做自动判定。
+
+## Agent 流程
 
 ```text
-app/
-├── interfaces/                         # 对外接口层
-│   └── http/                           # FastAPI 路由、请求响应模型、异常处理
-├── modules/                            # 业务模块，模块之间通过公开接口协作
-│   ├── customer_service/               # 客服模块
-│   │   ├── application/                # 客服用例、Agent 编排、会话流程
-│   │   ├── domain/                      # 意图、会话、人工接管等业务规则
-│   │   └── infrastructure/             # 客服相关模型和工具适配器
-│   ├── order/                           # 订单模块
-│   │   ├── application/                # 查询订单、取消订单、退款申请用例
-│   │   ├── domain/                      # 订单状态、权限、退款规则
-│   │   └── infrastructure/             # 订单仓储和支付适配器
-│   ├── catalog/                         # 商品与库存模块
-│   ├── logistics/                       # 物流模块
-│   ├── knowledge/                       # 知识库和 RAG 模块
-│   └── analytics/                       # 运营分析模块
-├── shared/                              # 真正跨模块的公共能力
-│   ├── config/                           # 配置加载
-│   ├── errors/                           # 统一异常
-│   ├── logging/                          # 日志、Trace ID 和审计上下文
-│   ├── security/                         # 身份、权限和脱敏
-│   └── events/                           # 领域事件和事件发布接口
-└── infrastructure/                      # 全局基础设施适配器
-    ├── persistence/                      # 数据库连接、事务和迁移
-    ├── ai/                               # LLM、Embedding、重排模型网关
-    ├── search/                           # 向量库和全文检索适配器
-    ├── cache/                            # Redis 或本地缓存适配器
-    └── external/                         # 外部平台 API 适配器
+自然语言
+  -> 意图识别（完整调研 / 单工具 / 通用问答）
+  -> AgentState 跟踪会话、用户偏好、当前任务和阶段结果
+  -> 市场 -> 趋势 -> 类目 -> 竞品 -> 评论 -> 关键词 -> 利润 -> 供应商 -> 评分
+  -> 趋势下行或利润率低于目标时按业务规则提前结束
+  -> 报告和来源证据
 ```
 
-当前起步模板的 `app/application`、`app/domain` 和 `app/infrastructure` 是为了先跑通功能的过渡结构。进入第 16 天以后，应逐步迁移到 `app/modules/customer_service`、`app/modules/order` 和 `app/modules/knowledge` 这种“按业务模块组织”的结构。
+每个分析工具返回来源、证据、置信度、数据时间和缺失值说明。Agent 不直接访问平台 API 或数据库；它通过 Application 工具调用 Domain 端口的 Infrastructure 实现。DeepSeek 用于意图识别和报告辅助，不会代替平台返回市场事实。
 
-## Agent、RAG 和 LLM 的正确位置
+## 数据适配规则
 
-### Agent
+- 1688 Open Platform 适配器只服务供应商搜索，使用官方 TOP HTTPS API `alibaba.open.search.daixiao.offer.get`。请求签名、响应字段映射和失败结果在 Infrastructure 内处理。
+- Amazon public pages 用于海外平台商品和价格样本；商品列表不等于成交数据。
+- Amazon 公开页面和 Google Trends 的可用数据作为海外市场的尽力读取来源，失败时保留空值和原因。
+- 不存在真实来源、权限或字段时，不填充虚构销量、评价、品牌、起订量或营收。
+- 1688 结果是供给侧线索，不应混入海外消费需求统计；来源与凭证状态分别展示。
 
-Agent 不是独立的业务层，也不是整个系统的总控制器。它属于客服模块的 Application 层，只负责：
+## 测试边界
 
-- 识别用户意图
-- 选择白名单工具
-- 编排订单查询、知识检索和人工接管
-- 控制最大步骤数、超时和失败重试
+适配器单测通过模拟 HTTP 响应验证参数、签名和映射，不要求真实平台账户。真实平台调用还受凭证、应用权限、配额、网络和平台当前政策影响。测试覆盖冒烟、功能、定向回归、性能、并发压力和全量回归。
 
-Agent 不能负责：
 
-- 决定用户是否有权限
-- 直接执行任意 SQL
-- 直接修改订单状态
-- 绕过退款和人工审核规则
+## 异步任务、租户和可观测
 
-### RAG
+HTTP 中间件为每个请求生成或接受关联 ID，记录路径、状态码和耗时，且不记录输入正文。配置 Redis 时使用共享队列与限流计数；无 Redis 时为本地线程和内存限流。
 
-RAG 属于知识库模块：
+任务和证据可存入共享 SQL 数据库；组织 ID 作为任务查询和会话键的隔离边界。账号使用 PBKDF2-SHA256 密码哈希和标准 HS256 JWT；每个请求会重查成员身份、角色和会话版本。迁移记录保存在 `schema_migrations`，生产数据库支持 MySQL 8.4 与 PostgreSQL，当前 Compose 默认 MySQL。Redis Streams 提供消费组确认、pending reclaim、数据库原子认领、心跳租约、有限重试、退避、死信记录和积压统计。该链路按至少一次投递设计，不宣称 exactly-once；多 Worker 崩溃与真实 MySQL/Redis 环境仍需部署验收。HTTP 组合根注入 Application RuntimeServices，路由不直接导入基础设施实现；Domain/Application 不依赖具体数据库、缓存、HTTP SDK 或 FastAPI。状态见[需求追踪矩阵](requirements-traceability.md)。
 
-```text
-文档上传 → 清洗切分 → Embedding → 索引
-用户问题 → 查询改写 → 混合检索 → 重排 → 引用上下文
-```
-
-客服模块通过知识库模块的应用接口调用 RAG，不直接操作向量数据库。
-
-### LLM
-
-LLM 应通过统一模型网关访问：
-
-```text
-CustomerAgent
-    ↓
-LLM Gateway Interface
-    ↓
-OpenAI API / 本地模型 / vLLM / Mock Client
-```
-
-更换模型供应商时，不应该修改订单规则和客服用例。
-
-## 请求、事务和异步任务
-
-### 同步请求
-
-适合实时返回的操作：
-
-- 查询订单
-- 查询物流
-- 查询库存
-- 知识库问答
-
-### 异步任务
-
-适合放到 Worker 或任务队列：
-
-- 文档解析和向量索引
-- 运营日报生成
-- 批量评测
-- 邮件或通知发送
-- 数据同步
-
-本地学习阶段可以先用 Python 后台任务模拟；企业部署阶段再替换成 Celery、消息队列或云任务服务。
-
-## 数据和安全边界
-
-- 关系数据库保存订单、用户、支付、库存和审计数据。
-- 向量数据库只保存知识检索索引，不能作为订单实时数据库。
-- Agent 工具通过应用接口访问数据，不直接拼接任意 SQL。
-- 退款、改地址、取消订单等高风险操作必须经过幂等校验、用户确认和人工审核。
-- 所有跨模块调用记录请求 ID、用户 ID、工具名、结果和耗时。
-- 用户隐私、地址、邮箱和支付信息必须脱敏后进入日志和模型上下文。
-
-## 演进路线
-
-```text
-本地模拟数据
-    ↓
-模块化单体 + SQLite
-    ↓
-模块化单体 + PostgreSQL / Redis / 向量库
-    ↓
-按实际瓶颈拆分知识库、模型网关或订单服务
-```
-
-拆分服务的依据应该是业务边界、团队边界、部署需求和性能瓶颈，而不是为了“看起来像微服务”而拆分。
-
+`GET /api/health/live` 与 `GET /api/health/ready` 分离存活和依赖就绪。容器部署定义在根目录 `Dockerfile` 和 `docker-compose.yml`，包括单独的 API 和 Worker 进程、MySQL、Redis 及健康检查。
